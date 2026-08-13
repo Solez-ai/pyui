@@ -14,7 +14,12 @@ export function generateCustomTkCodeList(widgetList = [], widgetRefs = [], paren
     let code = []
 
     for (let widget of widgetList) {
-        const widgetRef = widgetRefs[widget.id].current
+        // The widget ref may not be mounted yet (e.g. right after the widget is added to the tree,
+        // or while the canvas is initializing), so skip it instead of crashing.
+        const widgetRef = widgetRefs[widget.id]?.current
+        if (!widgetRef) {
+            continue
+        }
         let varName = widgetRef.getVariableName()
 
         // Add imports and requirements to sets

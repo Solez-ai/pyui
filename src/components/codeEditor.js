@@ -88,35 +88,42 @@ function CodeEditor({ framework }) {
 
     const { code, isFullProject } = useMemo(() => {
 
-        // if a widget is selected generate only its code
-        if (activeWidget) {
-            const found = findWidgetNodeAndParent(widgets, activeWidget.__id)
+        try {
+            // if a widget is selected generate only its code
+            if (activeWidget) {
+                const found = findWidgetNodeAndParent(widgets, activeWidget.__id)
 
-            if (!found) {
-                return { code: "# select a widget to see its live code", isFullProject: false }
+                if (!found) {
+                    return { code: "# select a widget to see its live code", isFullProject: false }
+                }
+
+                const parentVar = found.parent
+                    ? (widgetRefs.current[found.parent.id]?.current?.getVariableName?.() || "")
+                    : ""
+
+                const widgetCode = framework === FrameWorks.TKINTER
+                    ? generateTkinterWidgetCodeString(found.node, widgetRefs.current, parentVar)
+                    : generateCustomTkWidgetCodeString(found.node, widgetRefs.current, parentVar)
+
+                return { code: widgetCode, isFullProject: false }
             }
 
-            const parentVar = found.parent
-                ? (widgetRefs.current[found.parent.id]?.current?.getVariableName?.() || "")
-                : ""
+            // no widget selected -> show the full project code
+            const result = framework === FrameWorks.TKINTER
+                ? getTkinterCodeString(widgets, widgetRefs.current, { silent: true })
+                : getCustomTkCodeString(widgets, widgetRefs.current, { silent: true })
 
-            const widgetCode = framework === FrameWorks.TKINTER
-                ? generateTkinterWidgetCodeString(found.node, widgetRefs.current, parentVar)
-                : generateCustomTkWidgetCodeString(found.node, widgetRefs.current, parentVar)
+            if (!result) {
+                return { code: "# Add a Main window widget to see the generated code", isFullProject: true }
+            }
 
-            return { code: widgetCode, isFullProject: false }
+            return { code: result.code, isFullProject: true }
+
+        } catch (error) {
+            // never crash the whole app because of the live code panel
+            console.error("Failed to generate live code:", error)
+            return { code: `# Could not generate code yet\n# ${error?.message || "unknown error"}`, isFullProject: true }
         }
-
-        // no widget selected -> show the full project code
-        const result = framework === FrameWorks.TKINTER
-            ? getTkinterCodeString(widgets, widgetRefs.current, { silent: true })
-            : getCustomTkCodeString(widgets, widgetRefs.current, { silent: true })
-
-        if (!result) {
-            return { code: "# Add a Main window widget to see the generated code", isFullProject: true }
-        }
-
-        return { code: result.code, isFullProject: true }
 
     }, [widgets, activeWidget, framework, widgetRefs])
 
