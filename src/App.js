@@ -54,6 +54,60 @@ function App() {
 	// NOTE: the below reference is no longer required
 	const [canvasWidgets, setCanvasWidgets] = useState([]) // contains the reference to the widgets inside the canvas
 
+	/**
+	 * Loads a template into the builder: switches to tkinter (templates are tkinter based)
+	 * and rebuilds the canvas from the parsed template code.
+	 */
+	const handleLoadTemplate = (template) => {
+
+		if (!template?.code) return
+
+		const targetFramework = FrameWorks.TKINTER // templates are tkinter based
+
+		if (UIFramework !== targetFramework) {
+			setUIFramework(targetFramework)
+			setSidebarPlugins(TkinterPluginWidgets)
+			setSidebarWidgets(TkinterWidgets)
+		}
+
+		try {
+			// templates can ship an explicit widget tree (for templates whose python
+			// builds widgets in loops / with helper functions the parser can't follow)
+			let treeRoots = null
+
+			if (template.widgetTree) {
+				treeRoots = template.widgetTree
+			} else {
+				const parsed = parsePythonToWidgetTree(template.code)
+				treeRoots = parsed.roots
+			}
+
+			if (!treeRoots || treeRoots.length === 0) {
+				message.error("Could not load this template - no widgets found in its code")
+				return
+			}
+
+			const registry = buildWidgetTypeRegistry(TkinterWidgets)
+
+			// if we just switched framework, wait for the canvas to re-create the
+			// default main window before replacing it
+			const load = () => {
+				canvasRef?.current?.loadWidgetTree(treeRoots, registry)
+			}
+
+			if (UIFramework !== targetFramework) {
+				setTimeout(load, 150)
+			} else {
+				load()
+			}
+
+			message.success(`Loaded "${template.name}" into the builder`)
+		} catch (error) {
+			console.error("Failed to load template:", error)
+			message.error("Could not load this template")
+		}
+	}
+
 	const sidebarTabs = [
 		{
 			name: "Widgets",
@@ -212,60 +266,6 @@ function App() {
 
 	const handleWidgetAddedToCanvas = (widgets) => {
 		setCanvasWidgets(widgets)
-	}
-
-	/**
-	 * Loads a template into the builder: switches to tkinter (templates are tkinter based)
-	 * and rebuilds the canvas from the parsed template code.
-	 */
-	const handleLoadTemplate = (template) => {
-
-		if (!template?.code) return
-
-		const targetFramework = FrameWorks.TKINTER // templates are tkinter based
-
-		if (UIFramework !== targetFramework) {
-			setUIFramework(targetFramework)
-			setSidebarPlugins(TkinterPluginWidgets)
-			setSidebarWidgets(TkinterWidgets)
-		}
-
-		try {
-			// templates can ship an explicit widget tree (for templates whose python
-			// builds widgets in loops / with helper functions the parser can't follow)
-			let treeRoots = null
-
-			if (template.widgetTree) {
-				treeRoots = template.widgetTree
-			} else {
-				const parsed = parsePythonToWidgetTree(template.code)
-				treeRoots = parsed.roots
-			}
-
-			if (!treeRoots || treeRoots.length === 0) {
-				message.error("Could not load this template - no widgets found in its code")
-				return
-			}
-
-			const registry = buildWidgetTypeRegistry(TkinterWidgets)
-
-			// if we just switched framework, wait for the canvas to re-create the
-			// default main window before replacing it
-			const load = () => {
-				canvasRef?.current?.loadWidgetTree(treeRoots, registry)
-			}
-
-			if (UIFramework !== targetFramework) {
-				setTimeout(load, 150)
-			} else {
-				load()
-			}
-
-			message.success(`Loaded "${template.name}" into the builder`)
-		} catch (error) {
-			console.error("Failed to load template:", error)
-			message.error("Could not load this template")
-		}
 	}
 
 	const handleCodeGen = () => {
