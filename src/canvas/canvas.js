@@ -1208,25 +1208,33 @@ class Canvas extends React.Component {
                     if (!attrs["styling.backgroundColor"]) attrs["styling.backgroundColor"] = "#f0f0f0"
                 }
 
+                const initialData = {
+                    widgetName: parsed.variable,
+                    attrs,
+                    pos: parsed.pos || { x: 10, y: 10 },
+                    parentLayout: null,
+                    widgetContainer: parentId ? WidgetContainer.WIDGET : WidgetContainer.CANVAS,
+                    positionType: parentId ? PosType.ABSOLUTE : PosType.ABSOLUTE,
+                    zIndex: 0,
+                }
+
+                // only pass a size when the parsed data actually has one,
+                // otherwise the widget's constructor default is used (passing
+                // undefined would override it and crash getRenderSize())
+                if (parsed.size) {
+                    initialData.size = parsed.size
+                }
+
+                if (parentId) {
+                    initialData.parentWidgetRef = this.widgetRefs.current[parentId]
+                }
+
                 const node = {
                     id,
                     widgetType: WidgetClass,
                     children,
                     parent: parentId,
-                    initialData: {
-                        widgetName: parsed.variable,
-                        attrs,
-                        size: parsed.size || undefined,
-                        pos: parsed.pos || { x: 10, y: 10 },
-                        parentLayout: null,
-                        widgetContainer: parentId ? WidgetContainer.WIDGET : WidgetContainer.CANVAS,
-                        positionType: parentId ? PosType.ABSOLUTE : PosType.ABSOLUTE,
-                        zIndex: 0,
-                    }
-                }
-
-                if (parentId) {
-                    node.initialData.parentWidgetRef = this.widgetRefs.current[parentId]
+                    initialData,
                 }
 
                 nodes.push(node)

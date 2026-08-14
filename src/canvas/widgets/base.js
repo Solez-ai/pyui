@@ -1307,11 +1307,16 @@ class Widget extends React.Component {
 
     getRenderSize(){
 
-        let width = isNumeric(this.state.size.width) ? `${this.state.size.width}px` : this.state.size.width
-        let height = isNumeric(this.state.size.height) ? `${this.state.size.height}px` : this.state.size.height
+        // guard against a missing size/fitContent (eg: data loaded from code)
+        // so a single widget can never white-screen the whole app
+        const size = this.state.size || { width: 100, height: 100 }
+        const fitContent = this.state.fitContent || { width: false, height: false }
 
-        let fitWidth = this.state.fitContent.width
-        let fitHeight = this.state.fitContent.height
+        let width = isNumeric(size.width) ? `${size.width}px` : size.width
+        let height = isNumeric(size.height) ? `${size.height}px` : size.height
+
+        let fitWidth = fitContent.width
+        let fitHeight = fitContent.height
         
         if (fitWidth){
             // width = "max-content"
@@ -1323,8 +1328,8 @@ class Widget extends React.Component {
         }
 
         // if fit width is enabled then the minsize is the resizable size
-        let minWidth = fitWidth ? this.state.size.width : this.minSize.width
-        let minHeight = fitHeight ? this.state.size.height : this.minSize.height
+        let minWidth = fitWidth ? size.width : this.minSize.width
+        let minHeight = fitHeight ? size.height : this.minSize.height
 
         // let minWidth = fitWidth ? "max-content" : this.minSize.width
         // let minHeight = fitHeight ? "max-content" : this.minSize.height
