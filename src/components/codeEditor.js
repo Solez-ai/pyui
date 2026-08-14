@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { Button, Tooltip, message } from "antd"
-import { CopyOutlined, CodeOutlined } from "@ant-design/icons"
+import { CopyOutlined, CodeOutlined, PlayCircleOutlined, UndoOutlined } from "@ant-design/icons"
 
 import FrameWorks from "../constants/frameworks"
 import { useWidgetContext } from "../canvas/context/widgetContext"
 
 import { getTkinterCodeString, generateTkinterWidgetCodeString } from "../frameworks/tkinter/engine/code"
 import { getCustomTkCodeString, generateCustomTkWidgetCodeString } from "../frameworks/customtk/engine/code"
+
+import { parsePythonToWidgetTree, buildWidgetTypeRegistry } from "../frameworks/utils/pythonParser"
 
 // finds a widget node by id inside the widget tree, returns the node and its parent node
 function findWidgetNodeAndParent(nodes, id, parent = null) {
@@ -64,12 +66,17 @@ function highlightPython(code) {
 }
 
 
-function CodeEditor({ framework }) {
+function CodeEditor({ framework, canvasRef, sidebarWidgets }) {
 
     const { widgets, widgetRefs, activeWidget } = useWidgetContext()
 
     const [copied, setCopied] = useState(false)
     const copyTimerRef = useRef(null)
+
+    const [tab, setTab] = useState("view")
+
+    // editable draft of the full project code (edit tab)
+    const [draftCode, setDraftCode] = useState("")
 
     // track selection so the panel title can update
     const [selectedName, setSelectedName] = useState("")
@@ -127,6 +134,14 @@ function CodeEditor({ framework }) {
 
     }, [widgets, activeWidget, framework, widgetRefs])
 
+    // keep the editable draft in sync when the generated code changes
+    useEffect(() => {
+        if (tab === "edit" && isFullProject) {
+            setDraftCode(code)
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [code, tab, isFullProject])
+
     const handleCopy = () => {
         if (!code) return
 
@@ -139,20 +154,59 @@ function CodeEditor({ framework }) {
         })
     }
 
+    const handleApply = useCallback(() => {
+
+        if (!draftCode.trim()) {
+            message.warning("The code is empty")
+            return
+        }
+
+        if (!canvasRef?.current) {
+            message.error("Canvas is not ready yet")
+            return
+        }
+
+        try {
+            const parsed = parsePythonToWidgetTree(draftCode)
+
+            if (!parsed.roots || parsed.roots.length === 0) {
+                message.error("Could not find any widgets in the code. Make sure it contains a main window (tk.Tk()) and widget definitions.")
+                return
+            }
+
+            const registry = buildWidgetTypeRegistry(sidebarWidgets || [])
+
+            const applied = canvasRef.current.loadWidgetTree(parsed.roots, registry)
+
+            if (applied) {
+                message.success("Code applied to the canvas")
+            }
+
+        } catch (error) {
+            console.error("Failed to apply code:", error)
+            message.error(`Could not apply the code: ${error?.message || "unknown error"}`)
+        }
+
+    }, [draftCode, canvasRef, sidebarWidgets])
+
+    const handleResetDraft = () => {
+        setDraftCode(code)
+    }
+
     const codeLines = useMemo(() => code.split("\n"), [code])
 
-    return (
-        <div className="tw-w-[380px] tw-shrink-0 tw-h-full tw-flex tw-flex-col tw-border-l tw-border-solid tw-border-gray-200 tw-bg-[#1e1e1e]">
-            <div className="tw-h-[50px] tw-shrink-0 tw-flex tw-place-items-center tw-gap-2 tw-px-3 tw-bg-[#252526] tw-border-b tw-border-solid tw-border-gray-700">
-                <CodeOutlined className="tw-text-blue-400" />
-                <div className="tw-flex tw-flex-col tw-leading-tight">
-                    <span className="tw-text-sm tw-text-gray-100 tw-font-medium">
-                        {selectedName ? `Code · ${selectedName}` : "Live Code"}
-                    </span>
-                    <span className="tw-text-[11px] tw-text-gray-400">
-                        {isFullProject ? "main.py" : `${selectedName || "widget"} · python`}
-                    </span>
-                </div>
+    const editorHeader = (
+        <div className="tw-h-[50px] tw-shrink-0 tw-flex tw-place-items-center tw-gap-2 tw-px-3 tw-bg-[#252526] tw-border-b tw-border-solid tw-border-gray-700">
+            <CodeOutlined className="tw-text-blue-400" />
+            <div className="tw-flex tw-flex-col tw-leading-tight">
+                <span className="tw-text-sm tw-text-gray-100 tw-font-medium">
+                    {tab === "edit" ? "Edit Code" : (selectedName ? `Code · ${selectedName}` : "Live Code")}
+                </span>
+                <span className="tw-text-[11px] tw-text-gray-400">
+                    {tab === "edit" ? "main.py · editable" : (isFullProject ? "main.py" : `${selectedName || "widget"} · python`)}
+                </span>
+            </div>
+            {tab !== "edit" && (
                 <Tooltip title={copied ? "Copied!" : "Copy code"}>
                     <Button size="small"
                         className="tw-ml-auto"
@@ -163,23 +217,81 @@ function CodeEditor({ framework }) {
                         {copied ? "Copied" : "Copy"}
                     </Button>
                 </Tooltip>
+            )}
+            {tab === "edit" && (
+                <>
+                    <Tooltip title="Reset to generated code">
+                        <Button size="small" className="tw-ml-auto" icon={<UndoOutlined />} onClick={handleResetDraft} />
+                    </Tooltip>
+                    <Button size="small" type="primary" icon={<PlayCircleOutlined />} onClick={handleApply}>
+                        Apply
+                    </Button>
+                </>
+            )}
+        </div>
+    )
+
+    const editableArea = (
+        <div className="tw-flex-1 tw-overflow-auto tw-bg-[#1e1e1e]">
+            <textarea
+                value={draftCode}
+                onChange={(e) => setDraftCode(e.target.value)}
+                spellCheck={false}
+                className="tw-w-full tw-min-h-full tw-resize-none tw-outline-none tw-bg-transparent tw-text-gray-200 tw-text-[12.5px] tw-font-mono tw-leading-[1.5] tw-p-3 tw-border-0 tw-box-border"
+                style={{ tabSize: 4 }}
+            />
+        </div>
+    )
+
+    const readOnlyArea = (
+        <div className="tw-flex-1 tw-overflow-auto tw-p-0 tw-text-[12.5px] tw-font-mono tw-leading-[1.5]">
+            {
+                codeLines.map((line, index) => (
+                    <div key={index} className="tw-flex tw-h-[19px]">
+                        <span className="tw-w-[38px] tw-shrink-0 tw-text-right tw-pr-2 tw-select-none tw-text-gray-600">
+                            {index + 1}
+                        </span>
+                        <pre
+                            className="tw-m-0 tw-p-0 tw-whitespace-pre tw-text-gray-200"
+                            dangerouslySetInnerHTML={{ __html: highlightPython(line) || " " }}
+                        />
+                    </div>
+                ))
+            }
+        </div>
+    )
+
+    return (
+        <div className="tw-w-[420px] tw-shrink-0 tw-h-full tw-flex tw-flex-col tw-border-l tw-border-solid tw-border-gray-200 tw-bg-[#1e1e1e]">
+            {editorHeader}
+
+            <div className="tw-shrink-0 tw-flex tw-border-b tw-border-solid tw-border-gray-700">
+                <div className={`tw-flex-1 tw-text-center tw-text-xs tw-py-1 tw-cursor-pointer tw-select-none ${tab === "view" ? "tw-bg-[#1e1e1e] tw-text-blue-400 tw-border-b-2 tw-border-solid tw-border-blue-500" : "tw-bg-[#252526] tw-text-gray-400"}`}
+                    onClick={() => setTab("view")}>
+                    View
+                </div>
+                <div className={`tw-flex-1 tw-text-center tw-text-xs tw-py-1 tw-cursor-pointer tw-select-none ${tab === "edit" ? "tw-bg-[#1e1e1e] tw-text-blue-400 tw-border-b-2 tw-border-solid tw-border-blue-500" : "tw-bg-[#252526] tw-text-gray-400"}`}
+                    onClick={() => setTab("edit")}>
+                    Edit
+                </div>
             </div>
 
-            <div className="tw-flex-1 tw-overflow-auto tw-p-0 tw-text-[12.5px] tw-font-mono tw-leading-[1.5]">
-                {
-                    codeLines.map((line, index) => (
-                        <div key={index} className="tw-flex tw-h-[19px]">
-                            <span className="tw-w-[38px] tw-shrink-0 tw-text-right tw-pr-2 tw-select-none tw-text-gray-600">
-                                {index + 1}
-                            </span>
-                            <pre
-                                className="tw-m-0 tw-p-0 tw-whitespace-pre tw-text-gray-200"
-                                dangerouslySetInnerHTML={{ __html: highlightPython(line) || " " }}
-                            />
+            <div className="tw-flex-1 tw-overflow-hidden tw-flex tw-flex-col">
+                {tab === "edit"
+                    ? (isFullProject ? editableArea : (
+                        <div className="tw-flex-1 tw-flex tw-place-items-center tw-place-content-center tw-text-xs tw-text-gray-500 tw-px-6 tw-text-center">
+                            Deselect the selected widget to edit the full project code.
                         </div>
                     ))
+                    : readOnlyArea
                 }
             </div>
+
+            {tab === "edit" && (
+                <div className="tw-shrink-0 tw-px-3 tw-py-2 tw-bg-[#252526] tw-border-t tw-border-solid tw-border-gray-700 tw-text-[11px] tw-text-gray-400">
+                    Edit the Python code and click <span className="tw-text-blue-400">Apply</span> to rebuild the canvas from it. Only widgets that map to a builder widget will be loaded.
+                </div>
+            )}
         </div>
     )
 }

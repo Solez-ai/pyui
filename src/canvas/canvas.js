@@ -1166,6 +1166,102 @@ class Canvas extends React.Component {
         return recursiveFind(this.widgets)
     }
 
+    /**
+     * Loads a parsed widget tree (from pythonParser) onto the canvas, replacing
+     * the current contents. Used by the two-way code editor and template loading.
+     *
+     * @param {Array} parsedRoots - array of parsed widget nodes {variable, widgetType, parentVariable, attrs, size, pos, children}
+     * @param {Object} widgetRegistry - map of widgetType -> widget class (e.g. {label: Label, button: Button})
+     * @param {Object} options - { center: boolean }
+     */
+    loadWidgetTree(parsedRoots = [], widgetRegistry = {}, options = {}) {
+
+        // convert a parsed layout (place / flex / grid) to the canvas layout value
+        const parsedLayoutToValue = (layout) => {
+            if (!layout) return { layout: Layouts.PLACE, gap: 10 }
+            if (layout.type === "grid") return { layout: Layouts.GRID, gap: 10 }
+            if (layout.type === "flex") return { layout: Layouts.FLEX, gap: 10 }
+            return { layout: Layouts.PLACE, gap: 10 }
+        }
+
+        const buildNodes = (parsedNodes, parentId = "", parentLayout = null) => {
+
+            const nodes = []
+
+            for (const parsed of parsedNodes) {
+
+                const WidgetClass = widgetRegistry[parsed.widgetType]
+                if (!WidgetClass) continue
+
+                const id = `${parsed.widgetType}_${UID()}`
+                const widgetRef = React.createRef()
+                this.widgetRefs.current[id] = widgetRef
+
+                const children = buildNodes(parsed.children || [], id, parsed.layout || parentLayout)
+
+                const attrs = { ...(parsed.attrs || {}) }
+
+                // main window: apply the layout container + geometry
+                if (parsed.widgetType === "main_window") {
+                    attrs.layout = parsedLayoutToValue(parsed.layout || parentLayout)
+                    if (!attrs.title) attrs.title = "Main Window"
+                    if (!attrs["styling.backgroundColor"]) attrs["styling.backgroundColor"] = "#f0f0f0"
+                }
+
+                const node = {
+                    id,
+                    widgetType: WidgetClass,
+                    children,
+                    parent: parentId,
+                    initialData: {
+                        widgetName: parsed.variable,
+                        attrs,
+                        size: parsed.size || undefined,
+                        pos: parsed.pos || { x: 10, y: 10 },
+                        parentLayout: null,
+                        widgetContainer: parentId ? WidgetContainer.WIDGET : WidgetContainer.CANVAS,
+                        positionType: parentId ? PosType.ABSOLUTE : PosType.ABSOLUTE,
+                        zIndex: 0,
+                    }
+                }
+
+                if (parentId) {
+                    node.initialData.parentWidgetRef = this.widgetRefs.current[parentId]
+                }
+
+                nodes.push(node)
+            }
+
+            return nodes
+        }
+
+        this.clearCanvas()
+        this.setSelectedWidget(null)
+
+        const newWidgets = buildNodes(parsedRoots)
+
+        if (newWidgets.length === 0) {
+            message.warning("Could not find any widgets in the code")
+            return false
+        }
+
+        this.setWidgets(newWidgets)
+
+        // wait for the widgets to mount then center them
+        if (options.center !== false) {
+            setTimeout(() => {
+                try {
+                    this.resetTransforms()
+                    this.fitCanvasToBoundingBox(60)
+                } catch (error) {
+                    // ignore
+                }
+            }, 100)
+        }
+
+        return true
+    }
+
     removeWidget(widgetId) {
 
 

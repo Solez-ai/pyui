@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { LayoutFilled, ProductFilled, CloudUploadOutlined, AlignLeftOutlined, FileTextOutlined } from "@ant-design/icons"
+import { message } from "antd"
 // import { DndContext, useSensors, useSensor, PointerSensor, closestCorners, DragOverlay, rectIntersection } from '@dnd-kit/core'
 // import { snapCenterToCursor } from '@dnd-kit/modifiers'
 
@@ -30,6 +31,7 @@ import CTkMainWindow from './frameworks/customtk/widgets/mainWindow'
 import TreeviewContainer from './sidebar/treeviewContainer'
 import TemplatesContainer from './sidebar/templatesContainer'
 import { WidgetContextProvider } from './canvas/context/widgetContext'
+import { parsePythonToWidgetTree, buildWidgetTypeRegistry } from './frameworks/utils/pythonParser'
 
 
 function App() {
@@ -76,7 +78,7 @@ function App() {
 		{
 			name: "Templates",
 			icon: <FileTextOutlined />,
-			content: <TemplatesContainer />
+			content: <TemplatesContainer onLoadTemplate={handleLoadTemplate} />
 		}
 	]
 
@@ -212,6 +214,60 @@ function App() {
 		setCanvasWidgets(widgets)
 	}
 
+	/**
+	 * Loads a template into the builder: switches to tkinter (templates are tkinter based)
+	 * and rebuilds the canvas from the parsed template code.
+	 */
+	const handleLoadTemplate = (template) => {
+
+		if (!template?.code) return
+
+		const targetFramework = FrameWorks.TKINTER // templates are tkinter based
+
+		if (UIFramework !== targetFramework) {
+			setUIFramework(targetFramework)
+			setSidebarPlugins(TkinterPluginWidgets)
+			setSidebarWidgets(TkinterWidgets)
+		}
+
+		try {
+			// templates can ship an explicit widget tree (for templates whose python
+			// builds widgets in loops / with helper functions the parser can't follow)
+			let treeRoots = null
+
+			if (template.widgetTree) {
+				treeRoots = template.widgetTree
+			} else {
+				const parsed = parsePythonToWidgetTree(template.code)
+				treeRoots = parsed.roots
+			}
+
+			if (!treeRoots || treeRoots.length === 0) {
+				message.error("Could not load this template - no widgets found in its code")
+				return
+			}
+
+			const registry = buildWidgetTypeRegistry(TkinterWidgets)
+
+			// if we just switched framework, wait for the canvas to re-create the
+			// default main window before replacing it
+			const load = () => {
+				canvasRef?.current?.loadWidgetTree(treeRoots, registry)
+			}
+
+			if (UIFramework !== targetFramework) {
+				setTimeout(load, 150)
+			} else {
+				load()
+			}
+
+			message.success(`Loaded "${template.name}" into the builder`)
+		} catch (error) {
+			console.error("Failed to load template:", error)
+			message.error("Could not load this template")
+		}
+	}
+
 	const handleCodeGen = () => {
 
 		if (UIFramework === FrameWorks.TKINTER){
@@ -265,7 +321,7 @@ function App() {
 						{/* <ActiveWidgetProvider> */}
 						<Canvas ref={canvasRef} widgets={canvasWidgets} 
 								/>
-						<CodeEditor framework={UIFramework} />
+						<CodeEditor framework={UIFramework} canvasRef={canvasRef} sidebarWidgets={sidebarWidgets} />
 						{/* </ActiveWidgetProvider> */}
 					</div>
 					{/* dragOverlay (dnd-kit) helps move items from one container to another */}

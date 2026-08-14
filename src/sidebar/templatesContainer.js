@@ -1,7 +1,7 @@
 import { useState } from "react"
 
 import { Button, message } from "antd"
-import { CopyOutlined, CheckOutlined } from "@ant-design/icons"
+import { CopyOutlined, CheckOutlined, ExperimentOutlined } from "@ant-design/icons"
 
 
 const TEMPLATES = [
@@ -9,6 +9,56 @@ const TEMPLATES = [
         name: "Calculator",
         description: "A fully working calculator app built with tkinter",
         framework: "tkinter",
+        // an explicit widget tree so the template loads into the builder with all
+        // its widgets (the python code builds the buttons in a loop which the
+        // parser can't follow)
+        widgetTree: [
+            {
+                variable: "main",
+                widgetType: "main_window",
+                attrs: { title: "Calculator", "styling.backgroundColor": "#f0f0f0", "gridConfig.noOfCols": 4, "gridConfig.noOfRows": 6 },
+                size: { width: 280, height: 380 },
+                layout: { type: "grid" },
+                children: [
+                    {
+                        variable: "display",
+                        widgetType: "entry",
+                        attrs: { "gridManager.row": 1, "gridManager.column": 1, "gridManager.columnSpan": 4, "styling.fontFamily": "Arial", "styling.borderWidth": 8 },
+                        layout: { type: "grid" },
+                        children: []
+                    },
+                    // digit + operator buttons
+                    ...(["7", "8", "9", "/", "4", "5", "6", "*", "1", "2", "3", "-", "0", ".", "=", "+"].map((text, i) => ({
+                        variable: `button_${i}`,
+                        widgetType: "button",
+                        attrs: {
+                            buttonLabel: text,
+                            "gridManager.row": Math.floor(i / 4) + 2,
+                            "gridManager.column": (i % 4) + 1,
+                            "styling.fontFamily": "Arial",
+                            "styling.borderWidth": 4,
+                            "styling.backgroundColor": "#f0f0f0",
+                        },
+                        layout: { type: "grid" },
+                        children: []
+                    }))),
+                    {
+                        variable: "clear_button",
+                        widgetType: "button",
+                        attrs: {
+                            buttonLabel: "C",
+                            "gridManager.row": 6,
+                            "gridManager.column": 1,
+                            "gridManager.columnSpan": 4,
+                            "styling.backgroundColor": "#e74c3c",
+                            "styling.foregroundColor": "#fff",
+                        },
+                        layout: { type: "grid" },
+                        children: []
+                    },
+                ]
+            }
+        ],
         code: `import tkinter as tk
 
 main = tk.Tk()
@@ -203,7 +253,7 @@ main.mainloop()
 ]
 
 
-function TemplateCard({template}){
+function TemplateCard({template, onLoadTemplate}){
 
     const [copied, setCopied] = useState(false)
 
@@ -227,27 +277,34 @@ function TemplateCard({template}){
                 </span>
             </div>
             <p className="tw-text-xs tw-text-gray-500 tw-m-0">{template.description}</p>
-            <Button size="small"
-                    icon={copied ? <CheckOutlined /> : <CopyOutlined />}
-                    onClick={handleCopy}
-                    type={copied ? "primary" : "default"}
-                    className="tw-w-fit">
-                {copied ? "Copied!" : "Copy code"}
-            </Button>
+            <div className="tw-flex tw-gap-2">
+                <Button size="small"
+                        icon={copied ? <CheckOutlined /> : <CopyOutlined />}
+                        onClick={handleCopy}
+                        type={copied ? "primary" : "default"}>
+                    {copied ? "Copied!" : "Copy code"}
+                </Button>
+                <Button size="small"
+                        icon={<ExperimentOutlined />}
+                        onClick={() => onLoadTemplate?.(template)}
+                        type="default">
+                    Load in builder
+                </Button>
+            </div>
         </div>
     )
 }
 
 
-function TemplatesContainer(){
+function TemplatesContainer({onLoadTemplate}){
     return (
         <div className="tw-w-full tw-p-2 tw-gap-3 tw-flex tw-flex-col tw-overflow-x-hidden">
             <div className="tw-text-xs tw-text-gray-500 tw-px-1">
-                Ready-made Python UI templates. Click copy and paste the code into your project to learn how each UI is built.
+                Ready-made Python UI templates. Copy the code into your own project, or load a template straight into the builder to inspect and edit it.
             </div>
             {
                 TEMPLATES.map((template, index) => (
-                    <TemplateCard key={index} template={template} />
+                    <TemplateCard key={index} template={template} onLoadTemplate={onLoadTemplate} />
                 ))
             }
         </div>

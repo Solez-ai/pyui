@@ -1019,6 +1019,20 @@ export class CustomTkBase extends Widget {
                 // TODO: find a better way to apply innerStyles
                 this.setWidgetInnerStyle("backgroundColor", newAttrs.styling.backgroundColor.value)
             }
+
+            // apply the grid placement when a widget is loaded with gridManager
+            // attrs (eg: loaded from code / templates) - the onChange handlers that
+            // normally derive this are not fired during load()
+            const gridRow = newAttrs?.gridManager?.row?.value
+            const gridColumn = newAttrs?.gridManager?.column?.value
+            const rowSpan = newAttrs?.gridManager?.rowSpan?.value
+            const columnSpan = newAttrs?.gridManager?.columnSpan?.value
+
+            if (gridRow || gridColumn){
+                this.setWidgetOuterStyle("gridRow", `${gridRow || 1} / span ${rowSpan || 1}`)
+                this.setWidgetOuterStyle("gridColumn", `${gridColumn || 1} / span ${columnSpan || 1}`)
+            }
+
             this.updateState({ attrs: newAttrs }, callback)
 
             // FIXME: when changing layouts all the widgets are being selected
