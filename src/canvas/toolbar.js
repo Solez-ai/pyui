@@ -13,6 +13,7 @@ import { DynamicRadioInputList } from "../components/inputs.js"
 import { useFileUploadContext } from "../contexts/fileUploadContext.js"
 import { AudioOutlined, FileImageOutlined, FileTextOutlined, VideoCameraOutlined } from "@ant-design/icons"
 import { useWidgetContext } from "./context/widgetContext.js"
+import LessonPanel from "../components/lessonPanel"
 
 
 /**
@@ -498,6 +499,8 @@ const CanvasToolBar = memo(({ isOpen, widgetType, }) => {
                             tw-p-1 tw-px-2 tw-rounded-md tw-font-medium">
                 {capitalize(`${activeWidget?.getDisplayName() || ""}`).replace(/_/g, " ")}
             </h3>
+
+            <LessonPanel />
 
             <div className="tw-flex tw-flex-col tw-gap-2">
                 {renderToolbar(toolbarAttrs || {})}
